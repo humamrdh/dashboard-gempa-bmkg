@@ -1,7 +1,7 @@
 from datetime import datetime
 import pandas as pd
-from supabase import create_client
 import streamlit as st
+from supabase import create_client
 
 # 1. Konfigurasi Halaman Dashboard
 st.set_page_config(
@@ -22,14 +22,20 @@ SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
 
-@st.cache_data
+# Ditambahkan ttl=600 (10 menit) agar data otomatis ter-update jika database berubah
+@st.cache_data(ttl=600)
 def load_data_from_supabase():
     # Inisialisasi client Supabase
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     # Ambil data dari tabel cloud
-    response = supabase.table("info_gempa").select("*").execute()
-
+    response = (
+        supabase.table("info_gempa")
+        .select("*")
+        .order("waktu_gempa", ascending=False)
+        .limit(50)
+        .execute()
+    )
     # Ubah response JSON menjadi Pandas DataFrame
     df_cloud = pd.DataFrame(response.data)
     return df_cloud
@@ -45,66 +51,69 @@ if df.empty:
     )
     st.stop()
 
-# 3. TRANSFORM (Logika Pengolahan Grafik)
+# 3. TRANSFORM & BINDING DATA
 df["waktu_gempa"] = pd.to_datetime(df["waktu_gempa"])
 df["tanggal"] = df["waktu_gempa"].dt.date
 
+# PENTING: Pastikan nama kolom lat/lon sesuai dengan database kamu.
+# Jika di database namanya 'lintang' dan 'bujur', aktifkan baris di bawah ini:
+# df = df.rename(columns={"lintang": "latitude", "bujur": "longitude"})
+
+# Logika Pengolahan Grafik Tren
 df_tren = df.groupby("tanggal").size().reset_index(name="jumlah_gempa")
 df_tren["jumlah_gempa"] = df_tren["jumlah_gempa"].astype(int)
 df_tren = df_tren.sort_values("tanggal")
 
 
-# 4. VISUALIZATION: Menyusun Komponen Dashboard (5 Kolom Metrik Utama)
-kolom1, kolom2, kolom3, kolom4, kolom5 = st.columns(5)
+# 4. VISUALIZATION: Ringkasan Metrik Utama
+kolom1, kolom2, kolom3, kolom4 = st.columns(4)
 
 with kolom1:
-    total_gempa = len(df)
-    st.metric(label="Total Gempa Terpantau", value=f"{total_gempa} Kejadian")
-
-with kolom2:
     max_magnitude = df["magnitudo"].max()
     st.metric(
-        label="Magnitudo Tertinggi",
+        label="💥 Magnitudo Tertinggi",
         value=f"{max_magnitude} SR",
-        delta="Perlu Waspada",
-        delta_color="inverse",
+        delta="Perlu Waspada" if max_magnitude >= 5.0 else "Kondisi Aman",
+        delta_color="inverse" if max_magnitude >= 5.0 else "normal",
     )
 
-with kolom3:
+with kolom2:
     avg_kedalaman = round(df["kedalaman_km"].mean(), 1)
-    st.metric(label="Rata-rata Kedalaman", value=f"{avg_kedalaman} Km")
+    st.metric(label="📉 Rata-rata Kedalaman", value=f"{avg_kedalaman} Km")
+
+with kolom3:
+    min_kedalaman = round(df["kedalaman_km"].min())
+    st.metric(label="🟢 Kedalaman Terpendek", value=f"{min_kedalaman} Km")
 
 with kolom4:
-    min_kedalaman = round(df["kedalaman_km"].min())
-    st.metric(label="Minimal Kedalaman", value=f"{min_kedalaman} Km")
-
-with kolom5:
     max_kedalaman = round(df["kedalaman_km"].max())
-    st.metric(label="Maksimal Kedalaman", value=f"{max_kedalaman} Km")
+    st.metric(label="🔴 Kedalaman Terdalam", value=f"{max_kedalaman} Km")
 
 st.write("---")
 
 
-# 5. VISUALIZATION: Tata Letak (Peta, Tren Grafik, & Log Tabel)
-kolom_peta, kolom_tren, kolom_data = st.columns([2, 1, 1])
+# 5. VISUALIZATION: Tata Letak (Peta Sebaran & Tren Grafik)
+# Mengubah grid menjadi 2 kolom utama agar visualisasi peta dan grafik mendapatkan ruang maksimal
+kolom_peta, kolom_tren = st.columns([3, 2])
 
 with kolom_peta:
-    st.subheader("📍 Peta Sebaran Titik Gempa")
-    # Streamlit mendeteksi latitude & longitude langsung dari kolom database cloud
+    st.subheader("🗺️ Peta Sebaran 50 Titik Gempa Terbaru")
     st.map(df)
 
 with kolom_tren:
-    st.subheader("📊 Tren Harian")
+    st.subheader("📊 Tren Frekuensi Gempa Harian")
     st.bar_chart(
         data=df_tren,
         x="tanggal",
         y="jumlah_gempa",
-        width='stretch',
     )
 
-with kolom_data:
-    st.subheader("📋 Data Log Bersih")
-    st.dataframe(
-        df[["waktu_gempa", "magnitudo", "kedalaman_km", "wilayah"]],
-        hide_index=True,
-    )
+st.write("---")
+
+# 6. VISUALIZATION: Tabel Data Log Terkini (Ditaruh di paling bawah secara penuh)
+st.subheader("📋 Log Ringkas 20 Kejadian Gempa Terkini")
+st.dataframe(
+    df[["waktu_gempa", "magnitudo", "kedalaman_km", "wilayah"]].head(20),
+    width="stretch",
+    hide_index=True,
+)
