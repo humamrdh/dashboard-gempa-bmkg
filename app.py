@@ -111,7 +111,7 @@ with kolom_tren:
 st.write("---")
 
 # 6. VISUALIZATION: Tabel Data Log Terkini (Ditaruh di paling bawah secara penuh)
-df["No."] = range(1, 20)
+df["No."] = range(1, len(df)+1)
 st.subheader("📋 Log Ringkas 20 Kejadian Gempa Terkini")
 st.dataframe(
     df[["No.", "waktu_gempa", "magnitudo", "kedalaman_km", "wilayah"]].head(20),
