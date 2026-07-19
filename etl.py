@@ -54,7 +54,7 @@ try:
     masuk_database = df_bersih.to_dict(orient='records')    #Jadiin dictionary dulu
     
     print("[4/4] Mengirim data ke Supabase Cloud")
-    response_cloud = supabase.table("info_gempa").upsert(masuk_database).execute()
+    response_cloud = supabase.table("info_gempa").upsert(masuk_database, on_conflict="waktu_gempa, wilayah").execute()
     print("=== ETL Sukses, Data BMKG telah ter-update di Supabase Cloud ===")
 except requests.exceptions.RequestException as req_err:
     print(f"[ERROR] Gagal terhubung ke API BMKG: {req_err}")
