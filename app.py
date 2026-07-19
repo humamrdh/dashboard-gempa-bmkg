@@ -32,7 +32,7 @@ def load_data_from_supabase():
     response = (
         supabase.table("info_gempa")
         .select("*")
-        .order("waktu_gempa", ascending=False)
+        .order("waktu_gempa", desc=True)
         .limit(50)
         .execute()
     )
